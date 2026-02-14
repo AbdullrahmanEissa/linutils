@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 # --- Configuration ---
-# IMPORTANT: Replace YOUR_USERNAME and YOUR_REPO with your actual details.
-# The URL must point to the RAW file.
+# Ensure this matches your GitHub structure exactly
 GITHUB_REPO_URL="https://raw.githubusercontent.com/AbdullrahmanEissa/linutils/main/linutil.sh"
 MODULES_DIR="$(dirname "$0")/modules"
 LOG_FILE="/tmp/linutil.log"
@@ -31,24 +30,21 @@ detect_pkg_mgr() {
         export PKG_INSTALL="pacman -S --noconfirm"
         export PKG_CLEAN="pacman -Rns \$(pacman -Qtdq) --noconfirm 2>/dev/null; pacman -Sc --noconfirm"
     else
-        echo "Unsupported package manager. Exiting."
+        echo "Unsupported package manager."
         exit 1
     fi
 }
 
-# --- Safe Self-Update Mechanism ---
+# --- Safe Self-Update ---
 self_update() {
     echo "Checking connection to GitHub..."
     
-    # This specifically extracts JUST the number (e.g., 200 or 404)
+    # Get the HTTP status code
     HTTP_STATUS=$(curl -sL -o /dev/null -w "%{http_code}" "$GITHUB_REPO_URL")
 
     if [[ "$HTTP_STATUS" != "200" ]]; then
-        echo "❌ Connection Error!"
-        echo "GitHub returned status: $HTTP_STATUS"
-        echo "URL tried: $GITHUB_REPO_URL"
-        echo "Check if repo is public and code is pushed."
-        sleep 5
+        echo "❌ Connection Error! Status: $HTTP_STATUS"
+        sleep 3
         return
     fi
 
@@ -56,16 +52,22 @@ self_update() {
     echo "Downloading update..."
     curl -sL "$GITHUB_REPO_URL" -o "$temp_file"
 
-    if grep -q "#!" "$temp_file" && ! grep -q "404: Not Found" "$temp_file"; then
+    # DEBUG: Check what was actually downloaded
+    local first_line=$(head -n 1 "$temp_file")
+
+    # VALIDATION: Must start with #!
+    if [[ "$first_line" == *"#!"* ]]; then
         echo "✅ Update verified. Applying changes..."
         mv "$temp_file" "$0"
         chmod +x "$0"
-        echo "Done! Please restart the script."
+        echo "Update complete! Please restart: sudo $0"
         exit 0
     else
         echo "❌ Critical Error: Downloaded file is invalid."
+        echo "The file starts with: '$first_line'"
+        echo "It should start with '#!/usr/bin/env bash'"
         rm -f "$temp_file"
-        sleep 3
+        sleep 5
     fi
 }
 
@@ -75,54 +77,41 @@ declare -A MODULE_PATHS
 
 load_modules() {
     MENU_OPTIONS=()
-    MENU_OPTIONS+=("Update_LinUtil" "Safely update this tool from GitHub")
+    MENU_OPTIONS+=("Update_LinUtil" "Safely update from GitHub")
     
     mkdir -p "$MODULES_DIR"
-
     for mod in "$MODULES_DIR"/*; do
         if [[ -x "$mod" && ! -d "$mod" ]]; then
             local mod_name=$("$mod" name)
             local mod_base=$(basename "$mod")
-            
             MENU_OPTIONS+=("$mod_base" "$mod_name")
             MODULE_PATHS["$mod_base"]="$mod"
         fi
     done
 }
 
-# --- Main UI Loop ---
+# --- Main UI ---
 detect_pkg_mgr
-echo "LinUtil Session - $(date)" > "$LOG_FILE"
+echo "LinUtil started - $(date)" > "$LOG_FILE"
 
 while true; do
     load_modules
-    
-    CHOICE=$(whiptail --title "LinUtil v1.1 - Modular Engine ($PKG_MGR)" \
-                      --menu "Select a task. Logs are saved to $LOG_FILE" \
+    CHOICE=$(whiptail --title "LinUtil v1.2 ($PKG_MGR)" \
+                      --menu "Choose a task. Log: $LOG_FILE" \
                       20 75 10 \
                       "${MENU_OPTIONS[@]}" \
                       3>&1 1>&2 2>&3)
 
     if [ $? -ne 0 ]; then
-        clear
-        echo "Exiting LinUtil. See you next time!"
-        break
+        clear; echo "Exiting..."; break
     fi
 
-    case "$CHOICE" in
-        Update_LinUtil)
-            clear
-            self_update
-            ;;
-        *)
-            if [[ -n "${MODULE_PATHS[$CHOICE]}" ]]; then
-                clear
-                echo "Executing Module: $CHOICE"
-                echo "----------------------------------------------------"
-                "${MODULE_PATHS[$CHOICE]}" run 2>&1 | tee -a "$LOG_FILE"
-                echo "----------------------------------------------------"
-                read -p "Press Enter to return to the menu..."
-            fi
-            ;;
-    esac
+    if [[ "$CHOICE" == "Update_LinUtil" ]]; then
+        clear; self_update
+    elif [[ -n "${MODULE_PATHS[$CHOICE]}" ]]; then
+        clear
+        echo "Executing: $CHOICE"
+        "${MODULE_PATHS[$CHOICE]}" run 2>&1 | tee -a "$LOG_FILE"
+        read -p "Press Enter to return..."
+    fi
 done
