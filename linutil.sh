@@ -3,7 +3,7 @@
 # --- Configuration ---
 # IMPORTANT: Replace YOUR_USERNAME and YOUR_REPO with your actual details.
 # The URL must point to the RAW file.
-GITHUB_REPO_URL="https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/linutil.sh"
+GITHUB_REPO_URL="https://raw.githubusercontent.com/AbdullrahmanEissa/linutils/main/linutil.sh"
 MODULES_DIR="$(dirname "$0")/modules"
 LOG_FILE="/tmp/linutil.log"
 
