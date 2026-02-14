@@ -38,22 +38,24 @@ detect_pkg_mgr() {
 
 # --- Safe Self-Update Mechanism ---
 self_update() {
-    echo "Checking for updates..."
+    echo "Checking connection to GitHub..."
     
-    # 1. Test Internet Connection & URL Validity
-    if ! curl -Is "$GITHUB_REPO_URL" | grep -q "200 OK"; then
-        echo "❌ Error: Cannot reach the update server (404 or No Internet)."
-        echo "Check your GITHUB_REPO_URL: $GITHUB_REPO_URL"
-        sleep 3
+    # This specifically extracts JUST the number (e.g., 200 or 404)
+    HTTP_STATUS=$(curl -sL -o /dev/null -w "%{http_code}" "$GITHUB_REPO_URL")
+
+    if [[ "$HTTP_STATUS" != "200" ]]; then
+        echo "❌ Connection Error!"
+        echo "GitHub returned status: $HTTP_STATUS"
+        echo "URL tried: $GITHUB_REPO_URL"
+        echo "Check if repo is public and code is pushed."
+        sleep 5
         return
     fi
 
-    # 2. Download to a temporary file
     local temp_file="/tmp/linutil_stage.sh"
+    echo "Downloading update..."
     curl -sL "$GITHUB_REPO_URL" -o "$temp_file"
 
-    # 3. Integrity Check: Does it look like a real Bash script?
-    # We check for the Shebang (#!) and ensure it doesn't contain "404: Not Found"
     if grep -q "#!" "$temp_file" && ! grep -q "404: Not Found" "$temp_file"; then
         echo "✅ Update verified. Applying changes..."
         mv "$temp_file" "$0"
@@ -61,7 +63,7 @@ self_update() {
         echo "Done! Please restart the script."
         exit 0
     else
-        echo "❌ Critical Error: Downloaded file is corrupted or invalid."
+        echo "❌ Critical Error: Downloaded file is invalid."
         rm -f "$temp_file"
         sleep 3
     fi
